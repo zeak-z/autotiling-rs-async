@@ -5,9 +5,9 @@ This is a personal project mostly made with AI assistance, I personally am runni
 When used on sway (and possibly i3), this automatically alternates the container layout between horizontal and vertical for successive new containers.
 
 ## Usage
-Simply run the program `autotiling-rs`. To start it automatically, put it in your sway config like this: `exec autotiling-rs`.
+Simply run the program `autotiling-rs-async`. To start it automatically, put it in your sway config like this: `exec autotiling-rs-async`.
 
-For more info run `autotiling-rs --help`.
+For more info run `autotiling-rs-async --help`.
 
 ## Installation
 
