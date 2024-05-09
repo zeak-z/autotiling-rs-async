@@ -1,4 +1,7 @@
-# autotiling-rs
+# THIS IS AN AI EDITED FORK
+This is a personal project mostly made with AI assistance, I personally am running this on my setup but promise nothing. Do not be suprised by regressions or breakage. I take no credit for this since it was edited by ai and made by somone way more talented than me.
+
+# autotiling-rs-async
 When used on sway (and possibly i3), this automatically alternates the container layout between horizontal and vertical for successive new containers.
 
 ## Usage
