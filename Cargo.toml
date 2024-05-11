@@ -6,10 +6,12 @@ description = "Autotiling for sway (and possibly i3)"
 edition = "2018"
 
 [dependencies]
-swayipc = "3.0"
+swayipc-async = "2.0.2"
 tokio = { version = "1.25.0", features = ["full"] }
+futures-lite = "1.11.3"
 
 [dependencies.clap]
 version = "3.0"
 default-features = false
 features = ["std", "derive"]
+
