@@ -1,5 +1,6 @@
+use futures_lite::StreamExt;
 use std::sync::Arc;
-use swayipc::{Connection, Event, EventType, NodeLayout, WindowChange};
+use swayipc_async::{Connection, Event, EventType, NodeLayout, WindowChange};
 use tokio::sync::mpsc;
 use tokio::task;
 
@@ -9,9 +10,8 @@ use clap::Parser;
 async fn switch_splitting(conn: &mut Connection, allowed_workspaces: &[i32]) -> Result<(), String> {
     // Skip if the focused workspace is not in the allowed list (or allow all if the list is empty)
     if !allowed_workspaces.is_empty() {
-        let focused_workspace = conn
-            .get_workspaces()
-            .map_err(|_| "get_workspaces() failed")?
+        let workspaces = conn.get_workspaces().await.map_err(|_| "get_workspaces() failed")?;
+        let focused_workspace = workspaces
             .iter()
             .find(|w| w.focused)
             .map(|w| w.num)
@@ -22,13 +22,13 @@ async fn switch_splitting(conn: &mut Connection, allowed_workspaces: &[i32]) -> 
         }
     }
 
-    let tree = conn.get_tree().map_err(|_| "get_tree() failed")?;
+    let tree = conn.get_tree().await.map_err(|_| "get_tree() failed")?;
     let focused_node = tree
         .find_focused_as_ref(|n| n.focused)
         .ok_or("Could not find the focused node")?;
 
     // Skip if the focused node is floating, fullscreen, stacked, or tabbed
-    if focused_node.node_type == swayipc::NodeType::FloatingCon
+    if focused_node.node_type == swayipc_async::NodeType::FloatingCon
         || focused_node.percent.unwrap_or(1.0) > 1.0
         || focused_node.layout == NodeLayout::Stacked
         || focused_node.layout == NodeLayout::Tabbed
@@ -57,7 +57,7 @@ async fn switch_splitting(conn: &mut Connection, allowed_workspaces: &[i32]) -> 
         _ => unreachable!(),
     };
 
-    conn.run_command(cmd).map_err(|e| format!("run_command() failed: {}", e))?;
+    conn.run_command(cmd).await.map_err(|e| format!("run_command() failed: {}", e))?;
     Ok(())
 }
 
@@ -77,16 +77,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspaces = Arc::new(args.workspace);
 
     task::spawn(async move {
-        let conn = Connection::new()?;
-        let mut event_stream = conn.subscribe(&[EventType::Window])?;
+        let conn = Connection::new().await?;
+        let mut event_stream = conn.subscribe(&[EventType::Window]).await?;
 
-        while let Some(event) = event_stream.next() {
+        while let Some(event) = event_stream.next().await {
             if let Ok(Event::Window(window_event)) = event {
                 if let WindowChange::Focus = window_event.change {
                     let tx = Arc::clone(&tx);
                     let workspaces = Arc::clone(&workspaces);
                     task::spawn(async move {
-                        let mut conn = Connection::new()?;
+                        let mut conn = Connection::new().await?;
                         if let Err(err) = switch_splitting(&mut conn, &*workspaces).await {
                             eprintln!("Error: {}", err);
                         }
