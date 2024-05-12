@@ -1,4 +1,4 @@
-use futures_lite::StreamExt;
+use futures::stream::{TryStreamExt};
 use swayipc_async::{Connection, Event, EventType, NodeLayout, WindowChange, Node};
 use tokio::sync::mpsc;
 use tokio::task;
@@ -13,8 +13,8 @@ async fn switch_splitting(conn: &mut Connection, allowed_workspaces: &Arc<Vec<i3
         let workspaces = conn.get_workspaces().await?;
         let focused_workspace = workspaces
             .iter()
-            .find(|w| w.focused)
-            .map(|w| w.num)
+            .filter_map(|w| if w.focused { Some(w.num) } else { None })
+            .next()
             .ok_or("Could not find the focused workspace")?;
 
         if !allowed_workspaces.contains(&focused_workspace) {
@@ -26,11 +26,7 @@ async fn switch_splitting(conn: &mut Connection, allowed_workspaces: &Arc<Vec<i3
     let (focused_node, parent) = find_nodes(&tree)?;
 
     // Skip if the focused node is floating, fullscreen, stacked, or tabbed
-    if focused_node.node_type == swayipc_async::NodeType::FloatingCon
-        || focused_node.percent.unwrap_or(1.0) > 1.0
-        || focused_node.layout == NodeLayout::Stacked
-        || focused_node.layout == NodeLayout::Tabbed
-    {
+    if let (swayipc_async::NodeType::FloatingCon, _, NodeLayout::Stacked, NodeLayout::Tabbed) = (focused_node.node_type, focused_node.percent.unwrap_or(1.0) > 1.0, focused_node.layout, focused_node.layout) {
         return Ok(());
     }
 
@@ -65,9 +61,7 @@ fn find_nodes<'a>(node: &'a Node) -> Result<(&'a Node, &'a Node), Box<dyn std::e
 
 async fn create_conn_and_switch_splitting(tx: mpsc::Sender<()>, workspaces: Arc<Vec<i32>>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut conn = Connection::new().await?;
-    if let Err(err) = switch_splitting(&mut conn, &workspaces).await {
-        eprintln!("Error: {}", err);
-    }
+    switch_splitting(&mut conn, &workspaces).await?;
     tx.send(()).await?;
     Ok(())
 }
@@ -80,34 +74,37 @@ struct Cli {
     workspace: Vec<i32>,
 }
 
+const CHANNEL_CAPACITY: usize = 100;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Cli::parse();
-    let (tx, mut rx) = mpsc::channel(100);
+    let (sender, mut receiver) = mpsc::channel(CHANNEL_CAPACITY);
 
-    let workspaces = Arc::new(args.workspace); // Wrap the vector in an Arc here
+    let workspaces = Arc::new(args.workspace);
 
     task::spawn(async move {
         let conn = Connection::new().await?;
-        let mut event_stream = conn.subscribe(&[EventType::Window]).await?;
+        let event_stream = conn.subscribe(&[EventType::Window]).await?;
 
-        while let Some(event) = event_stream.next().await {
-            if let Ok(Event::Window(window_event)) = event {
+        event_stream.try_for_each_concurrent(None, |event| {
+            if let Event::Window(window_event) = event {
                 if let WindowChange::Focus = window_event.change {
-                    let tx = tx.clone();
+                    let sender = sender.clone();
                     let workspaces_clone = Arc::clone(&workspaces);
                     task::spawn(async move {
-                        if let Err(e) = create_conn_and_switch_splitting(tx, workspaces_clone).await {
+                        if let Err(e) = create_conn_and_switch_splitting(sender, workspaces_clone).await {
                             eprintln!("Error occurred: {:?}", e);
                         }
                     });
                 }
             }
-        }
+            futures::future::ok(())
+        }).await?;
         Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
     });
 
-    while let Some(_) = rx.recv().await {}
+    while let Some(_) = receiver.recv().await {}
 
     Ok(())
 }
