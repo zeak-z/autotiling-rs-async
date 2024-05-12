@@ -5,13 +5,24 @@ authors = ["Jason Nader <jason.nader@protonmail.com>"]
 description = "Autotiling for sway (and possibly i3)"
 edition = "2018"
 
+# Original versions
+# [dependencies]
+# swayipc-async = "2.0.2"
+# tokio = { version = "1.25.0", features = ["full"] }
+# futures = "0.3.17"
+# [dependencies.clap]
+# version = "3.0"
+# default-features = false
+# features = ["std", "derive"]
+
+# Latest versions
 [dependencies]
-swayipc-async = "2.0.2"
-tokio = { version = "1.25.0", features = ["full"] }
-futures-lite = "1.11.3"
+swayipc-async = "*"
+tokio = { version = "*", features = ["full"] }
+futures = "*"
 
 [dependencies.clap]
-version = "3.0"
+version = "*"
 default-features = false
 features = ["std", "derive"]
 
